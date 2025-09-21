@@ -37,6 +37,41 @@ class MaskedAttention(nn.Module):
         
         self.explainability_mask = nn.Parameter(torch.ones(num_classes, num_heads, head_dim))
 
+    def forward(self, x, y_labels):
+        # x: input tensor
+        # y_labels: ground truth labels for the current batch, shape (batch_size,)
+        
+        B, N, C = x.shape
+        
+        # 1. 原始的注意力计算
+        # (B, num_heads, N, N)
+        attn_weights = self.attn.qkv(x).reshape(B, N, 3, self.attn.num_heads, self.attn.head_dim).permute(2, 0, 3, 1, 4)
+        q, k, v = attn_weights[0], attn_weights[1], attn_weights[2]
+        
+        attn = (q @ k.transpose(-2, -1)) * self.attn.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn.attn_drop(attn)
+        
+        # (B, num_heads, N, head_dim)
+        x = (attn @ v)
+        
+        # 2. X-Pruner核心：应用掩码
+        # 根据标签索引对应的掩码
+        # mask_for_batch 的形状: (B, num_heads, head_dim)
+        mask_for_batch = self.explainability_mask[y_labels]
+        
+        # 调整mask形状以进行广播: (B, num_heads, 1, head_dim)
+        mask_for_batch = mask_for_batch.unsqueeze(2)
+        
+        # 应用掩码 (element-wise multiplication)
+        x = x * mask_for_batch
+        
+        # 3. 后续原始操作
+        x = x.transpose(1, 2).reshape(B, N, self.attn.head_dim * self.attn.num_heads)
+        x = self.attn.proj(x)
+        x = self.attn.proj_drop(x)
+        return x
+
 
 class VisionTransformerDistilled(VisionTransformer):
     """ Vision Transformer w/ Distillation Token and Head
