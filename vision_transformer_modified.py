@@ -73,6 +73,8 @@ from ._features import feature_take_indices
 from ._manipulate import named_apply, checkpoint, checkpoint_seq, adapt_input_conv
 from ._registry import generate_default_cfgs, register_model, register_model_deprecations
 
+from deit_modified import MaskedAttention
+
 __all__ = ['VisionTransformer']  # model_registry will add each entrypoint fn to this
 
 
@@ -128,6 +130,7 @@ class Block(nn.Module):
             act_layer: Type[nn.Module] = nn.GELU,
             norm_layer: Type[nn.Module] = LayerNorm,
             mlp_layer: Type[nn.Module] = Mlp,
+            num_classes = int,
     ) -> None:
         """Initialize Block.
 
@@ -148,7 +151,7 @@ class Block(nn.Module):
         """
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(
+        original_attn = Attention(
             dim,
             num_heads=num_heads,
             qkv_bias=qkv_bias,
@@ -159,6 +162,7 @@ class Block(nn.Module):
             proj_drop=proj_drop,
             norm_layer=norm_layer,
         )
+        self.attn = MaskedAttention(original_attn, num_classes=num_classes)
         self.ls1 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
@@ -174,8 +178,8 @@ class Block(nn.Module):
         self.ls2 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), attn_mask=attn_mask)))
+    def forward(self, x: torch.Tensor, y_labels: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), y_labels=y_labels)))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
         return x
 
@@ -598,6 +602,7 @@ class VisionTransformer(nn.Module):
                 norm_layer=norm_layer,
                 act_layer=act_layer,
                 mlp_layer=mlp_layer,
+                num_classes=self.num_classes,
             )
             for i in range(depth)])
         self.feature_info = [
@@ -933,7 +938,7 @@ class VisionTransformer(nn.Module):
             attn_mask=attn_mask,
         )
 
-    def forward_features(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward_features(self, x: torch.Tensor, y_labels: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Forward pass through feature layers (embeddings, transformer blocks, post-transformer norm)."""
         x = self.patch_embed(x)
         x = self._pos_embed(x)
@@ -943,7 +948,7 @@ class VisionTransformer(nn.Module):
         if attn_mask is not None:
             # If mask provided, we need to apply blocks one by one
             for blk in self.blocks:
-                x = blk(x, attn_mask=attn_mask)
+                x = blk(x, y_labels=y_labels, attn_mask=attn_mask)
         elif self.grad_checkpointing and not torch.jit.is_scripting():
             x = checkpoint_seq(self.blocks, x)
         else:
@@ -991,8 +996,8 @@ class VisionTransformer(nn.Module):
         x = self.head_drop(x)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        x = self.forward_features(x, attn_mask=attn_mask)
+    def forward(self, x: torch.Tensor, y_labels: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = self.forward_features(x, y_labels=y_labels, attn_mask=attn_mask)
         x = self.forward_head(x)
         return x
 

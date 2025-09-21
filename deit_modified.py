@@ -37,7 +37,7 @@ class MaskedAttention(nn.Module):
         
         self.explainability_mask = nn.Parameter(torch.ones(num_classes, num_heads, head_dim))
 
-    def forward(self, x, y_labels):
+    def forward(self, x, y_labels, attn_mask = None):
         # x: input tensor
         # y_labels: ground truth labels for the current batch, shape (batch_size,)
         
@@ -49,6 +49,9 @@ class MaskedAttention(nn.Module):
         q, k, v = attn_weights[0], attn_weights[1], attn_weights[2]
         
         attn = (q @ k.transpose(-2, -1)) * self.attn.scale
+
+        if attn_mask is not None:
+            attn = attn + attn_mask
         attn = attn.softmax(dim=-1)
         attn = self.attn.attn_drop(attn)
         
