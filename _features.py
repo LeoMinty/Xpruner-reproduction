@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 from timm.layers import Format, _assert
-from ._manipulate import checkpoint
+from _manipulate import checkpoint
 
 __all__ = [
     'FeatureInfo', 'FeatureHooks', 'FeatureDictNet', 'FeatureListNet', 'FeatureHookNet', 'FeatureGetterNet',

@@ -76,10 +76,10 @@ from timm.layers import (
     AttentionRope,
     AttentionPoolLatent,
 )
-from ._builder import build_model_with_cfg
-from ._features import feature_take_indices
-from ._manipulate import checkpoint
-from ._registry import generate_default_cfgs, register_model
+from _builder import build_model_with_cfg
+from _features import feature_take_indices
+from _manipulate import checkpoint
+from _registry import generate_default_cfgs, register_model
 
 __all__ = ['Eva']
 

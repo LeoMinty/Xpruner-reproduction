@@ -17,7 +17,7 @@ from timm.layers import (
     get_notrace_modules,
     Format,
  )
-from ._features import _get_feature_info, _get_return_layers
+from _features import _get_feature_info, _get_return_layers
 
 
 

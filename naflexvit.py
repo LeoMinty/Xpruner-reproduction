@@ -40,13 +40,13 @@ from timm.layers import (
     apply_keep_indices_nlc,
     disable_compiler,
 )
-from ._builder import build_model_with_cfg
-from ._features import feature_take_indices
-from ._features_fx import register_notrace_function, register_notrace_module
-from ._manipulate import checkpoint, named_apply
-from ._registry import register_model, generate_default_cfgs
-from .eva import EvaBlock
-from .vision_transformer_modified import Block, global_pool_nlc
+from _builder import build_model_with_cfg
+from _features import feature_take_indices
+from _features_fx import register_notrace_function, register_notrace_module
+from _manipulate import checkpoint, named_apply
+from _registry import register_model, generate_default_cfgs
+from eva import EvaBlock
+from vision_transformer_modified import Block, global_pool_nlc
 
 __all__ = ['NaFlexVitCfg', 'NaFlexVit']
 

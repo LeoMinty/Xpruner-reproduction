@@ -19,8 +19,8 @@ from torch import nn as nn
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.layers import resample_abs_pos_embed
 from timm.models.vision_transformer import VisionTransformer, trunc_normal_, checkpoint_filter_fn
-from ._builder import build_model_with_cfg
-from ._registry import generate_default_cfgs, register_model, register_model_deprecations
+from _builder import build_model_with_cfg
+from _registry import generate_default_cfgs, register_model, register_model_deprecations
 
 __all__ = ['VisionTransformerDistilled']  # model_registry will add each entrypoint fn to this
 

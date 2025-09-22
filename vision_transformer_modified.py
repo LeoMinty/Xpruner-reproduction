@@ -68,10 +68,10 @@ from timm.layers import (
     maybe_add_mask,
     LayerType,
 )
-from ._builder import build_model_with_cfg
-from ._features import feature_take_indices
-from ._manipulate import named_apply, checkpoint, checkpoint_seq, adapt_input_conv
-from ._registry import generate_default_cfgs, register_model, register_model_deprecations
+from _builder import build_model_with_cfg
+from _features import feature_take_indices
+from _manipulate import named_apply, checkpoint, checkpoint_seq, adapt_input_conv
+from _registry import generate_default_cfgs, register_model, register_model_deprecations
 
 from deit_modified import MaskedAttention
 

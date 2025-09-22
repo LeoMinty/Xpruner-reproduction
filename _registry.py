@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Sequence, Union, Tuple
 
-from ._pretrained import PretrainedCfg, DefaultCfg
+from _pretrained import PretrainedCfg, DefaultCfg
 
 __all__ = [
     'split_model_name_tag', 'get_arch_name', 'register_model', 'generate_default_cfgs',
