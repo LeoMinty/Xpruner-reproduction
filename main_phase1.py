@@ -43,7 +43,35 @@ print("模型加载完毕。")
 
 
 # --- 4. 设置损失函数和优化器 ---
-# 从我上次回复中复制 calculate_total_loss_phase1 和 get_all_masks 函数到这里
+def get_all_masks(model):
+    """辅助函数：从模型中找到所有掩码参数"""
+    for name, param in model.named_parameters():
+        if "explainability_mask" in name:
+            yield param
+
+def calculate_total_loss_phase1(model, outputs, labels, ce_loss_fn, lambda_sp, lambda_sm):
+    """计算第一阶段的总损失"""
+    
+    # 1. 交叉熵损失
+    loss_ce = ce_loss_fn(outputs, labels)
+    
+    # 2. 稀疏性损失 (L_sparse - Eq. 7)
+    loss_sparse = torch.tensor(0.0, device=loss_ce.device)
+    for mask in get_all_masks(model):
+        loss_sparse += torch.norm(mask, p=2) # L2 norm
+
+    # 3. 平滑性损失 (L_smooth - Eq. 6)
+    # 这是一个简化的、可操作的实现，惩罚相邻类别掩码之间的差异
+    loss_smooth = torch.tensor(0.0, device=loss_ce.device)
+    for mask in get_all_masks(model):
+        # 沿类别维度计算差分
+        if mask.shape[0] > 1: # 确保类别数大于1
+            diff = mask[1:, ...] - mask[:-1, ...]
+            loss_smooth += torch.norm(diff, p=1) # L1 norm of differences
+
+    # 总损失
+    total_loss = loss_ce + lambda_sp * loss_sparse + lambda_sm * loss_smooth
+    return total_loss
 
 # 冻结模型原始权重
 for name, param in model.named_parameters():
