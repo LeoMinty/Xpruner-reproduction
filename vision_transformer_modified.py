@@ -634,7 +634,7 @@ class VisionTransformer(nn.Module):
         self.norm_pre = norm_layer(embed_dim) if pre_norm else nn.Identity()
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
-        self.blocks = nn.Sequential(*[
+        self.blocks = nn.ModuleList(*[
             block_fn(
                 dim=embed_dim,
                 num_heads=num_heads,
@@ -994,6 +994,7 @@ class VisionTransformer(nn.Module):
         x = self.patch_drop(x)
         x = self.norm_pre(x)
 
+        '''保留原始代码逻辑
         if attn_mask is not None:
             # If mask provided, we need to apply blocks one by one
             for blk in self.blocks:
@@ -1002,7 +1003,11 @@ class VisionTransformer(nn.Module):
             x = checkpoint_seq(self.blocks, x)
         else:
             x = self.blocks(x)
-
+        '''
+        #使用无条件的for循环手动遍历blocks
+        for blk in self.blocks:
+            x = blk(x, y_labels, attn_mask = attn_mask)
+        
         x = self.norm(x)
         return x
 
