@@ -31,7 +31,7 @@ from collections import OrderedDict
 from functools import partial
 from typing import Any, Callable, Dict, Optional, Set, Tuple, Type, Union, List
 
-from naflexvit import NaFlexVit
+
 try:
     from typing import Literal
 except ImportError:
@@ -73,13 +73,62 @@ from _features import feature_take_indices
 from _manipulate import named_apply, checkpoint, checkpoint_seq, adapt_input_conv
 from _registry import generate_default_cfgs, register_model, register_model_deprecations
 
-from deit_modified import MaskedAttention
 
 __all__ = ['VisionTransformer']  # model_registry will add each entrypoint fn to this
 
 
 _logger = logging.getLogger(__name__)
 
+class MaskedAttention(nn.Module):
+    def __init__(self, original_attention_module, num_classes):
+        super().__init__()
+        self.attn = original_attention_module
+        
+        # 为每个注意力头创建一个与类别相关的掩码
+        # 维度: (类别数, 头数, 每个头的输出维度)
+        # 注意：论文中掩码维度是 C x d，这里我们为每个头创建，更精细
+        head_dim = self.attn.head_dim
+        num_heads = self.attn.num_heads
+        
+        self.explainability_mask = nn.Parameter(torch.ones(num_classes, num_heads, head_dim))
+
+    def forward(self, x, y_labels, attn_mask = None):
+        # x: input tensor
+        # y_labels: ground truth labels for the current batch, shape (batch_size,)
+        
+        B, N, C = x.shape
+        
+        # 1. 原始的注意力计算
+        # (B, num_heads, N, N)
+        attn_weights = self.attn.qkv(x).reshape(B, N, 3, self.attn.num_heads, self.attn.head_dim).permute(2, 0, 3, 1, 4)
+        q, k, v = attn_weights[0], attn_weights[1], attn_weights[2]
+        
+        attn = (q @ k.transpose(-2, -1)) * self.attn.scale
+
+        if attn_mask is not None:
+            attn = attn + attn_mask
+        attn = attn.softmax(dim=-1)
+        attn = self.attn.attn_drop(attn)
+        
+        # (B, num_heads, N, head_dim)
+        x = (attn @ v)
+        
+        # 2. X-Pruner核心：应用掩码
+        # 根据标签索引对应的掩码
+        # mask_for_batch 的形状: (B, num_heads, head_dim)
+        mask_for_batch = self.explainability_mask[y_labels]
+        
+        # 调整mask形状以进行广播: (B, num_heads, 1, head_dim)
+        mask_for_batch = mask_for_batch.unsqueeze(2)
+        
+        # 应用掩码 (element-wise multiplication)
+        x = x * mask_for_batch
+        
+        # 3. 后续原始操作
+        x = x.transpose(1, 2).reshape(B, N, self.attn.head_dim * self.attn.num_heads)
+        x = self.attn.proj(x)
+        x = self.attn.proj_drop(x)
+        return x
 
 class LayerScale(nn.Module):
     """Layer scale module.
@@ -148,7 +197,7 @@ class Block(nn.Module):
             act_layer: Activation layer.
             norm_layer: Normalization layer.
             mlp_layer: MLP layer.
-        """
+        """ 
         super().__init__()
         self.norm1 = norm_layer(dim)
         original_attn = Attention(
@@ -2695,13 +2744,13 @@ def _create_vision_transformer(
         pretrained: bool = False,
         use_naflex: Optional[bool] = None,
         **kwargs,
-) -> Union[VisionTransformer, 'NaFlexVit']:
+) -> Union[VisionTransformer, 'NaFlexVit']: # type: ignore
     # Check if we should use NaFlexVit instead
     if use_naflex is None:
         use_naflex = _USE_NAFLEX_DEFAULT
     if use_naflex:
         # Import here to avoid circular imports
-        from .naflexvit import _create_naflexvit_from_classic
+        from naflexvit import _create_naflexvit_from_classic
         return _create_naflexvit_from_classic(variant, pretrained, **kwargs)
 
     out_indices = kwargs.pop('out_indices', 3)
