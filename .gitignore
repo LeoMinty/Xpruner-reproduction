@@ -16,3 +16,4 @@ db.ini
 deploy_key_rsa
 
 # Datasets
+data/*
