@@ -108,5 +108,12 @@ for epoch in range(EPOCHS):
             print(f"Epoch [{epoch+1}/{EPOCHS}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
 
 print("第一阶段训练完成!")
+
+
 # 保存训练好的掩码权重
-# torch.save(model.state_dict(), 'model_with_trained_masks.pth')
+
+
+output_filename = "deit_small_phase1_masks_cifar10.pth"
+print(f"正在将模型状态保存到: {output_filename} ...")
+torch.save(model.state_dict(), output_filename)
+print("保存成功！")
