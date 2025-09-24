@@ -30,7 +30,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # --- 3. 加载模型并切换到剪枝模式 ---
 model = deit_small_patch16_224(pretrained=False, num_classes=NUM_CLASSES)
 print(f"正在从 {MODEL_STATE_PATH} 加载模型状态...")
-model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location=device))
+model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location=device), strict=False)
 model.to(device)
 print("加载成功！")
 
@@ -55,7 +55,7 @@ def calculate_pruning_loss(model, alpha_target, total_prunable_elements, beta, g
         if isinstance(module, MaskedAttention):
             r = torch.sigmoid(module.r_logit)
             num_elements_in_module = module.explainability_mask.numel()
-            current_R += (r * num_elements_in_module) / total_prunable_elements
+            current_R += ((r * num_elements_in_module) / total_prunable_elements).sum()
     
     loss_r = beta * (alpha_target - current_R)**2 + gamma * (alpha_target - current_R)
     return loss_r
