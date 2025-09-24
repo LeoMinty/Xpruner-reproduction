@@ -92,6 +92,11 @@ class MaskedAttention(nn.Module):
         
         self.explainability_mask = nn.Parameter(torch.ones(num_classes, num_heads, head_dim))
 
+        # --- 新增：为剪枝阶段创建可学习参数 ---
+        self.r_logit = nn.Parameter(torch.zeros(1)) # sigmoid(r_logit) -> 剪枝率 r
+        self.theta = nn.Parameter(torch.zeros(1))   # 剪枝阈值 theta
+        self.is_pruning_phase = False # 一个开关，用于区分不同阶段
+
     def forward(self, x, y_labels, attn_mask = None):
         # x: input tensor
         # y_labels: ground truth labels for the current batch, shape (batch_size,)
@@ -111,24 +116,65 @@ class MaskedAttention(nn.Module):
         attn = self.attn.attn_drop(attn)
         
         # (B, num_heads, N, head_dim)
-        x = (attn @ v)
+        x_attn = (attn @ v)
         
-        # 2. X-Pruner核心：应用掩码
+        # --- 根据阶段选择不同的掩码 ---
+
         # 根据标签索引对应的掩码
         # mask_for_batch 的形状: (B, num_heads, head_dim)
-        mask_for_batch = self.explainability_mask[y_labels]
+        mask_scores = self.explainability_mask[y_labels]
+
+        if self.is_pruning_phase:
+            # 第二阶段：应用可微分剪枝操作
+            final_mask = differentiable_pruning_operation(mask_scores, self.r_logit, self.theta)
+        else:
+            # 第一阶段或推理阶段：直接使用分数
+            final_mask = mask_scores
+        
         
         # 调整mask形状以进行广播: (B, num_heads, 1, head_dim)
-        mask_for_batch = mask_for_batch.unsqueeze(2)
+        final_mask = final_mask.unsqueeze(2)
         
         # 应用掩码 (element-wise multiplication)
-        x = x * mask_for_batch
+        x_masked = x_attn * final_mask
         
         # 3. 后续原始操作
-        x = x.transpose(1, 2).reshape(B, N, self.attn.head_dim * self.attn.num_heads)
-        x = self.attn.proj(x)
-        x = self.attn.proj_drop(x)
-        return x
+        x_reshaped = x_masked.transpose(1, 2).reshape(B, N, self.attn.head_dim * self.attn.num_heads)
+        x_proj = self.attn.proj(x_reshaped)
+        x_out = self.attn.proj_drop(x_proj)
+        return x_out
+
+def differentiable_pruning_operation(mask_scores, r_logit, theta, n=10.0):
+    """实现 Eq. 9 的核心思想,简化版,专注于保留top k"""
+    r = torch.sigmoid(r_logit)
+
+    # 将分数展平以便排序
+    flat_scores = mask_scores.flatten()
+
+    # 计算需要保留的元素数量 k
+    k = int((1.0 - r) * flat_scores.numel())
+    # 确保k至少为1，避免全部剪掉
+    k = max(1, k) 
+
+    # 找到作为阈值的第k大的分数
+    top_k_threshold = torch.kthvalue(flat_scores, k).values
+
+    # 创建一个布尔掩码，标记重要单元 (大于等于阈值)
+    is_important = mask_scores >= top_k_threshold
+
+    # 应用tanh平滑函数，这是可微分的关键
+    # 对于不重要的单元，其值将被抑制趋近于0
+    # 对于重要的单元，其值将保持不变
+    tanh_term = torch.tanh(n * (mask_scores - theta))
+
+    # 只保留重要单元的分数，不重要的置零
+    pruned_mask = torch.where(
+        is_important,
+        mask_scores, # 保留原始分数
+        torch.zeros_like(mask_scores) # 不重要的直接置零
+    )
+
+    return pruned_mask
 
 class LayerScale(nn.Module):
     """Layer scale module.

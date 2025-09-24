@@ -5,7 +5,7 @@ import timm
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
-# ！！！关键：从你修改过的本地文件导入模型！！！
+# 关键：从你修改过的本地文件导入模型
 from deit_modified import deit_small_patch16_224
 
 # --- 1. 定义超参数和配置 ---
