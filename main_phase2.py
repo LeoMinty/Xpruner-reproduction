@@ -45,8 +45,8 @@ for module in model.modules():
 ce_loss_fn = nn.CrossEntropyLoss()
 
 # 新增：用于L_R损失的可学习参数
-beta = nn.Parameter(torch.tensor(0.0)).to(device)
-gamma = nn.Parameter(torch.tensor(0.0)).to(device)
+beta = nn.Parameter(torch.tensor(0.0, device=device))
+gamma = nn.Parameter(torch.tensor(0.0, device=device))
 
 def calculate_pruning_loss(model, alpha_target, total_prunable_elements, beta, gamma):
     """计算剪枝率正则化损失 L_R (Eq. 10, 11)"""
