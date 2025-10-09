@@ -12,7 +12,7 @@ from vision_transformer_modified import MaskedAttention # 导入用于类型检�
 NUM_CLASSES = 10
 BATCH_SIZE = 128
 EPOCHS = 80 # 论文中DeiT的剪枝训练轮数
-ALPHA_TARGET = 0.5 # 目标总剪枝率, e.g., 剪掉50%
+ALPHA_TARGET = 0.2 # 目标总剪枝率
 
 # 模型状态文件路径
 MODEL_STATE_PATH = "deit_small_phase1_masks_cifar10.pth"
@@ -99,7 +99,11 @@ for epoch in range(EPOCHS):
         # 计算损失
         loss_ce = ce_loss_fn(outputs, labels)
         loss_r = calculate_pruning_loss(model, ALPHA_TARGET, num_prunable_elements, beta, gamma)
-        total_loss = loss_ce + loss_r
+        
+        # 引入一个超参数 lambda_prune 来放大剪枝损失的权重
+        lambda_prune = 10.0 # 可以从1.0, 10.0, 100.0开始尝试
+        total_loss = loss_ce + lambda_prune * loss_r
+        # total_loss = loss_ce + loss_r
         
         # 反向传播
         total_loss.backward()
@@ -110,6 +114,8 @@ for epoch in range(EPOCHS):
         
         if i % 50 == 0:
             print(f"Epoch [{epoch+1}/{EPOCHS}], Step [{i+1}/{len(train_loader)}], Total Loss: {total_loss.item():.4f}, CE Loss: {loss_ce.item():.4f}, Pruning Loss: {loss_r.item():.4f}")
+
+            print(f"--> beta: {beta.item():.6f}, gamma: {gamma.item():.6f}")
 
 print("第二阶段训练完成!")
 # 保存最终的剪枝模型
