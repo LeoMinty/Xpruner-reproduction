@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from deit_modified import deit_small_patch16_224
 
 # --- 配置 ---
-MODEL_STATE_PATH = "deit_small_phase2_pruned.pth"
+MODEL_STATE_PATH = "deit_small_phase2_pruned_test.pth"
 NUM_CLASSES = 10
 NUM_BLOCKS = 12 # deit-small 有12个block
 

@@ -66,20 +66,21 @@ for module in model.modules():
 ce_loss_fn = nn.CrossEntropyLoss()
 
 # 新增：用于L_R损失的可学习参数
-beta = nn.Parameter(torch.tensor(0.0, device=device))
-gamma = nn.Parameter(torch.tensor(0.0, device=device))
+# beta = nn.Parameter(torch.tensor(0.0, device=device))
+# gamma = nn.Parameter(torch.tensor(0.0, device=device))
 
-def calculate_pruning_loss(model, alpha_target, total_prunable_elements, beta, gamma):
-    """计算剪枝率正则化损失 L_R (Eq. 10, 11)"""
+def calculate_pruning_loss_simple(model, alpha_target, total_prunable_elements):
+    """计算一个简单的、稳定的二次惩罚剪枝损失"""
     current_R = torch.tensor(0.0, device=device)
     for module in model.modules():
         if isinstance(module, MaskedAttention):
             r = torch.sigmoid(module.r_logit)
             num_elements_in_module = module.explainability_mask.numel()
             current_R += ((r * num_elements_in_module) / total_prunable_elements).sum()
-    
-    loss_r = beta * (alpha_target - current_R)**2 + gamma * (alpha_target - current_R)
-    return loss_r
+
+    # 核心修改：使用二次惩罚
+    loss_r = (current_R - alpha_target)**2
+    return loss_r, current_R # 同时返回current_R用于监控
 
 # --- 关键：为不同参数组设置不同的优化器和学习率 ---
 # a. 冻结第一阶段学到的掩码分数
@@ -94,8 +95,8 @@ for name, param in model.named_parameters():
         model_weights.append(param)
 
 # 添加beta和gamma到模型权重组
-model_weights.append(beta)
-model_weights.append(gamma)
+# model_weights.append(beta)
+# model_weights.append(gamma)
         
 optimizer_weights = torch.optim.AdamW(model_weights, lr=5e-4)
 optimizer_pruning = torch.optim.AdamW(pruning_params, lr=0.02)
@@ -119,10 +120,10 @@ for epoch in range(EPOCHS):
         
         # 计算损失
         loss_ce = ce_loss_fn(outputs, labels)
-        loss_r = calculate_pruning_loss(model, ALPHA_TARGET, num_prunable_elements, beta, gamma)
+        loss_r, current_R_val = calculate_pruning_loss_simple(model, ALPHA_TARGET, num_prunable_elements)
         
         # 引入一个超参数 lambda_prune 来放大剪枝损失的权重
-        lambda_prune = 10.0 # 可以从1.0, 10.0, 100.0开始尝试
+        lambda_prune = 50.0 # 可以从1.0, 10.0, 100.0开始尝试
         total_loss = loss_ce + lambda_prune * loss_r
         # total_loss = loss_ce + loss_r
         
@@ -134,13 +135,13 @@ for epoch in range(EPOCHS):
         optimizer_pruning.step()
         
         if i % 50 == 0:
-            print(f"Epoch [{epoch+1}/{EPOCHS}], Step [{i+1}/{len(train_loader)}], Total Loss: {total_loss.item():.4f}, CE Loss: {loss_ce.item():.4f}, Pruning Loss: {loss_r.item():.4f}")
+            
+            print(f"Epoch [{epoch+1}/{EPOCHS}], Step [{i+1}/{len(train_loader)}], Total Loss: {total_loss.item():.4f}, CE Loss: {loss_ce.item():.4f}, Pruning Loss: {loss_r.item():.4f}, Current R: {current_R_val.item():.4f}")
 
-            print(f"--> beta: {beta.item():.6f}, gamma: {gamma.item():.6f}")
 
 print("第二阶段训练完成!")
 # 保存最终的剪枝模型
-output_filename = "deit_small_phase2_pruned.pth"
+output_filename = "deit_small_phase2_pruned_test.pth"
 print(f"正在将模型状态保存到: {output_filename} ...")
 torch.save(model.state_dict(), output_filename)
 print("保存成功！")
